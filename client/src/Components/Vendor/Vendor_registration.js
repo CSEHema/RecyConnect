@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { isValidPhoneNumber } from 'libphonenumber-js';
-import image from '../../static/images/recycle_connect.gif';
+import image from '../../static/images/Untitled_design.png';
 import axios from 'axios';
 
 function generateCaptcha(length = 5) {
@@ -22,8 +22,9 @@ function Vendor_registration() {
       const [email, setEmail] = useState("");
       const [name, setName] = useState("")
       const [phno, setPhno] = useState("");
+      const [purposes, setPurposes] = useState([]);
+      const [purposeInput, setPurposeInput] = useState("");
       const [address, setAddress] = useState("");
-      const [purpose, setPurpose] = useState("");
       const [captcha, setCaptcha] = useState("");
       const [userCaptcha, setUserCaptcha] = useState("");
       const [captchaError, setCaptchaError] = useState("");
@@ -113,7 +114,7 @@ function Vendor_registration() {
     password,
     phno,
     address,
-    purpose
+    purposes
   })
   .then((response) => {
     console.log(response.data.message);
@@ -121,8 +122,6 @@ function Vendor_registration() {
     setEmail("");
     setPassword("");
     setPhno("");
-    setAddress("");
-    setPurpose("");
     setUserCaptcha("");
     setCaptcha(generateCaptcha());
     setError(false);
@@ -267,31 +266,64 @@ function Vendor_registration() {
                     </p>))}
               </div>
 
-              {/* ADDRESS */}
-                  <div className="mb-3">
-                    <label className="form-label">Address</label>
-                    <textarea
-                      className="form-control"
-                      rows="2"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Enter your shop or business address"
-                    ></textarea>
-                  </div>
+              {/* ADDRESS */} 
+              <div className="mb-3"> 
+                <label className="form-label">Address</label> 
+                <textarea className="form-control" rows="2" value={address} 
+                onChange={(e) => setAddress(e.target.value)} placeholder="Enter your shop or business address" ></textarea>
+              </div>
 
-                  {/* PURPOSE */}
-                  <div className="mb-3">
-                    <label className="form-label">
-                      What do you want to sell?
-                    </label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={purpose}
-                      onChange={(e) => setPurpose(e.target.value)}
-                      placeholder="e.g. Scrap metal, e-waste, plastic bottles..."
-                    />
-                  </div>
+              {/* PURPOSE / PRODUCTS PREFERENCE */}
+<div className="mb-3">
+  <label className="form-label">
+    What types of products do you want to sell? (max 4)
+  </label>
+
+  <input
+    type="text"
+    className="form-control"
+    placeholder="Type a product and press Enter (e.g. scrap metal, e-waste)"
+    value={purposeInput}
+    onChange={(e) => setPurposeInput(e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const newItem = purposeInput.trim();
+        if (newItem && !purposes.includes(newItem)) {
+          if (purposes.length < 4) {
+            setPurposes([...purposes, newItem]);
+            setPurposeInput("");
+          } else {
+            alert("You can only add up to 4 preferred products.");
+          }
+        }
+      }
+    }}
+  />
+
+  {/* Display selected products */}
+  <div className="mt-2 d-flex flex-wrap gap-2">
+    {purposes.map((item, index) => (
+      <div
+        key={index}
+        className="badge bg-success text-light d-flex align-items-center p-2"
+        style={{ fontSize: "0.9rem" }}
+      >
+        {item}
+        <button
+          type="button"
+          className="btn-close btn-close-white ms-2"
+          aria-label="Remove"
+          onClick={() => {
+            setPurposes(purposes.filter((_, i) => i !== index));
+          }}
+          style={{ fontSize: "0.6rem" }}
+        ></button>
+      </div>
+    ))}
+  </div>
+</div>
+
 
               <div className="mb-3">
                 <label className="form-label">CAPTCHA</label>
@@ -341,7 +373,7 @@ function Vendor_registration() {
               >
                 SignUp
               </button>
-              <p className="text-success text-center mt-3">Already have an account? <a href="/vendor_login">Log In</a></p>
+              <p className="text-success text-center mt-3">Already have an account? <a href="/user_login">Log In</a></p>
             </form>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from 'axios';
-import image from '../../static/images/Untitled_1.png';
+import image from '../../static/images/recycle_connect.gif';
 
 function generateCaptcha(length = 5) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -277,7 +277,7 @@ function Vendor_login() {
               >
                 Login
               </button>
-              <p className="text-success text-center mt-3">Don't have an account? <a href="/vendor_registration">Sign Up</a></p>
+              <p className="text-success text-center mt-3">Don't have an account? <a href="/user_registration">Sign Up</a></p>
             </form>
           </div>
         </div>
