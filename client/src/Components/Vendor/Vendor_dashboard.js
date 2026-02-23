@@ -1,233 +1,217 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import {
+  Container,
+  Row,
+  Col,
+  Button,
+  Card,
+  Navbar,
+  Image,
+  Badge,
+  Modal
+} from "react-bootstrap";
+import { useNavigate ,Link} from "react-router-dom";
+
+// Standardizing assets
 import banner from "../../static/images/user_dash_banner.png";
-import profilePic from "../../static/images/Untitled_1.png";
+import profilePic from "../../static/images/Untitled_1.png"; 
 import jug from "../../static/images/plastic_jug.jpg";
-import jute from "../../static/images/jute.jpg";
-import watch from "../../static/images/watch.jpg";
-import { Container, Row, Col, Card, Button, Navbar } from "react-bootstrap";
-import { useNavigate } from "react-router-dom";
+
+const API_BASE_URL = "http://localhost:5000/api";
 
 const Vendor_dashboard = ({ onLogout }) => {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("Bhavya Srinivas");
-  const [orders, setOrders] = useState([]);
-  const [activeTab, setActiveTab] = useState("all"); // all, received, pending
+  const [activeTab, setActiveTab] = useState("discover");
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
 
-  // Dummy items
-  const dummyOrders = [
-    {
-      _id: "1",
-      name: "Plastic jugs",
-      cost: 20,
-      qty: 2,
-      status: "Order is waiting",
-      imageUrl: `${jug}`,
-    },
-    {
-      _id: "2",
-      name: "Jute sheets",
-      cost: 40,
-      qty: 1,
-      status: "Pending",
-      imageUrl: `${jute}`,
-    },
-    {
-      _id: "3",
-      name: "Smart Watch",
-      cost: 60,
-      qty: 1,
-      status: "Order is waiting",
-      imageUrl: `${watch}`,
-    },
-  ];
+  // States for dynamic data
+  const [availableWaste, setAvailableWaste] = useState([]);
+  const [myPickups, setMyPickups] = useState([]);
 
   useEffect(() => {
-    setOrders(dummyOrders);
-
     const fetchData = async () => {
       try {
-        const userRes = await axios.get("/api/user/profile");
-
-        if (userRes.data?.username) setUsername(userRes.data.username);
-
-        // Uncomment when backend ready
-        // const orderRes = await axios.get("/api/user/orders");
-        // setOrders(orderRes.data);
+        const res = await axios.get(`${API_BASE_URL}/vendor/discover`);
+        setAvailableWaste(res.data);
       } catch (err) {
-        console.error(err);
+        // Fallback Dummies with high-quality formatting
+        setAvailableWaste([
+          { 
+            _id: "w1", name: "Plastic Bottles", weight: "12kg", distance: "1.2 km", 
+            imageUrl: jug, sellerName: "John Doe", sellerAddress: "Banjara Hills, Hyd",
+            sellerPhone: "+91 9876543210", sellerEmail: "john@email.com"
+          },
+          { 
+            _id: "w2", name: "Old Newspaper Bundle", weight: "25kg", distance: "3.5 km", 
+            imageUrl: jug, sellerName: "Anjali Rao", sellerAddress: "Jubilee Hills, Hyd",
+            sellerPhone: "+91 8888877777", sellerEmail: "anjali@email.com"
+          },
+        ]);
       }
     };
     fetchData();
   }, []);
 
-  const filteredOrders = orders.filter((order) => {
-    if (activeTab === "all") return true;
-    if (activeTab === "received")
-      return order.status !== "Pending"; // received or processing
-    if (activeTab === "pending") return order.status === "Pending";
-    return true;
-  });
+  const openUserProfile = (user) => {
+    setSelectedUser(user);
+    setShowUserModal(true);
+  };
 
-  const handleLogout = async () => {
-    try {
-      await axios.post("/api/logout");
-      onLogout();
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+  const handlePlaceOrder = (item) => {
+    setAvailableWaste(prev => prev.filter(i => i._id !== item._id));
+    setMyPickups(prev => [{ ...item, status: "Intimation Sent" }, ...prev]);
+    alert(`Request sent to ${item.sellerName}!`);
   };
 
   return (
-    <div className="d-flex flex-column flex-md-row">
-      {/* ---------- LEFT SIDEBAR ---------- */}
-      <div
-        style={{
-          width: "220px",
-          backgroundColor: "#f4a8d4",
-          minHeight: "100vh",
-          padding: "20px 10px",
-        }}
-        className="flex-shrink-0"
-      >
-        <div className="text-center mb-3">
-          <img
-            src={profilePic}
-            alt="Profile"
-            style={{ width: "100px", height: "100px", borderRadius: "50%" }}
-          />
-          <h5 className="mt-2">{username}</h5>
-        </div>
+    <>
+      <style>{`
+        .dashboard-layout { display: flex; flex-direction: column; height: 100vh; background-color: #f8f9fa; }
+        .main-content-wrapper { display: flex; flex-grow: 1; overflow: hidden; }
+        
+        .top-navbar { background: #1b5e20; color: #fff; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        
+        .sidebar { width: 280px; background-color: #e8f5e9; border-right: 1px solid #c8e6c9; padding: 30px 0; }
+        .nav-item { padding: 15px 30px; cursor: pointer; color: #2e7d32; font-weight: 500; font-size: 1.1rem; transition: 0.3s; display: flex; align-items: center; }
+        .nav-item:hover { background: #c8e6c9; }
+        .nav-item.active { background: #2e7d32; color: white; }
 
-        <div className="sidebar-links">
-          <p>- View Profile</p>
-          <p
-            style={{ cursor: "pointer" }}
-            onClick={() => navigate("/product-catalog")}
-          >
-            - Product Catalog
-          </p>
-          <p>- Go to Home</p>
-        </div>
-      </div>
+        .main-content { flex-grow: 1; overflow-y: auto; padding: 40px; }
+        
+        .content-banner { 
+            height: 250px; 
+            background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${banner}); 
+            background-size: cover; background-position: center; border-radius: 15px; margin-bottom: 35px; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; 
+        }
 
-      {/* ---------- RIGHT SECTION ---------- */}
-      <div style={{ flexGrow: 1 }}>
-        <Navbar bg="light" className="px-4 justify-content-between shadow-sm">
-          <Navbar.Brand className="fw-bold">Vendor Dashboard</Navbar.Brand>
+        /* Large Aesthetic Cards matching User Dashboard */
+        .item-card { 
+            background: white; border-radius: 15px; padding: 20px; margin-bottom: 25px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08); display: flex; align-items: center; border-left: 8px solid #1b5e20; 
+        }
+        .item-img-large { width: 120px; height: 120px; object-fit: cover; border-radius: 12px; margin-right: 25px; }
+        .card-title-text { font-size: 1.4rem; font-weight: bold; color: #333; }
+        .card-sub-text { font-size: 1.1rem; color: #666; }
+      `}</style>
 
-          <div>
-            <span className="me-3">
-              Welcome, <strong>{username}</strong>
-            </span>
-            <Button variant="outline-danger" size="sm" onClick={handleLogout}>
-              Logout
-            </Button>
-          </div>
-        </Navbar>
+      <div className="dashboard-layout">
+        {/* Top Navbar */}
+         <nav className="top-navbar">
+  {/* Standardized Logo Branding */}
+  <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }} className="fw-bold fs-3">
+    Recy<span style={{ color: "#81c784" }}>Connect</span>
+  </Link>
+  
+  <Button variant="outline-light" onClick={onLogout}>Logout</Button>
+</nav>
+        <div className="main-content-wrapper">
+          {/* Sidebar */}
+          <aside className="sidebar">
+            <div className="text-center mb-5">
+              <Image src={profilePic} roundedCircle width="100" height="100" className="border shadow-sm mb-3" />
+              <h4 className="text-success fw-bold">Rajtha Ramachandran</h4>
+            </div>
+            <div className={`nav-item ${activeTab === 'discover' ? 'active' : ''}`} onClick={() => setActiveTab('discover')}>
+              <i className="bi bi-search me-3"></i> Discover Waste
+            </div>
+            <div className={`nav-item ${activeTab === 'pickups' ? 'active' : ''}`} onClick={() => setActiveTab('pickups')}>
+              <i className="bi bi-truck me-3"></i> Active Pickups
+            </div>
+          </aside>
 
-        {/* Banner */}
-        <div
-          className="text-center text-white d-flex align-items-center justify-content-center"
-          style={{
-            backgroundImage: `url(${banner})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            height: "180px",
-          }}
-        >
-          <h3 className="fw-bold bg-dark bg-opacity-50 px-4 py-2 rounded">
-            Your Orders
-          </h3>
-        </div>
+          {/* Main Content Area */}
+          <main className="main-content">
+            <div className="content-banner">
+                <h1 className="display-5 fw-bold">Bridging the gap between waste and wealth.</h1>
+                <p className="lead fst-italic">Sourcing sustainability, one pickup at a time.</p>
+            </div>
 
-        {/* TABS (Buttons) */}
-        <Container className="mt-3 text-center">
-          <Button
-            className="mx-2 px-4"
-            style={{
-              backgroundColor: activeTab === "all" ? "#f8b2dd" : "#e0e0e0",
-              border: 0,
-            }}
-            onClick={() => setActiveTab("all")}
-          >
-            View All Orders
-          </Button>
-
-          <Button
-            className="mx-2 px-4"
-            style={{
-              backgroundColor: activeTab === "received" ? "#f8b2dd" : "#e0e0e0",
-              border: 0,
-              color: "green",
-            }}
-            onClick={() => setActiveTab("received")}
-          >
-            Received Orders
-          </Button>
-
-          <Button
-            className="mx-2 px-4"
-            style={{
-              backgroundColor: activeTab === "pending" ? "#f8b2dd" : "#e0e0e0",
-              border: 0,
-              color: "red",
-            }}
-            onClick={() => setActiveTab("pending")}
-          >
-            To Be Received Orders
-          </Button>
-        </Container>
-
-        {/* Orders List */}
-        <Container
-          className="mt-4 p-4"
-          style={{ backgroundColor: "#e6e6e6", borderRadius: "8px" }}
-        >
-          {filteredOrders.length === 0 ? (
-            <p className="text-center">No orders to display</p>
-          ) : (
-            filteredOrders.map((order) => (
-              <div
-                key={order._id}
-                className="d-flex flex-column flex-md-row align-items-md-center justify-content-between p-3 mb-3"
-                style={{ backgroundColor: "#ffe6e6", borderRadius: "8px" }}
-              >
-                <div className="d-flex align-items-center">
-                  <img
-                    src={order.imageUrl}
-                    alt={order.name}
-                    style={{
-                      width: "70px",
-                      height: "70px",
-                      borderRadius: "50%",
-                      marginRight: "15px",
-                    }}
-                  />
-
-                  <div>
-                    <h5>{order.name}</h5>
-                    <p className="text-success mb-0">
-                      Cost: {order.cost}Rs &nbsp;&nbsp; Qty: {order.qty}
-                    </p>
+            {activeTab === "discover" && (
+              <div>
+                <h3 className="mb-4 text-success fw-bold">Waste Near You</h3>
+                {availableWaste.map(item => (
+                  <div key={item._id} className="item-card">
+                    <Image src={item.imageUrl} className="item-img-large" />
+                    <div className="flex-grow-1">
+                      <div className="card-title-text">{item.name}</div>
+                      <div className="card-sub-text mb-2">Weight: {item.weight} | <span className="text-primary fw-bold">📍 {item.distance}</span></div>
+                      <Badge bg="light" text="dark" className="border">Seller: {item.sellerName}</Badge>
+                    </div>
+                    <div className="d-flex flex-column gap-2">
+                      <Button variant="success" className="fw-bold px-4" onClick={() => handlePlaceOrder(item)}>Place Order</Button>
+                      <Button variant="outline-secondary" className="fw-bold btn-sm" onClick={() => openUserProfile(item)}>View Seller</Button>
+                    </div>
                   </div>
-                </div>
-
-                <div className="mt-2 mt-md-0 text-end">
-                  {order.status === "Pending" ? (
-                    <Button variant="danger">Place Order</Button>
-                  ) : (
-                    <p className="m-0">
-                      Status: <br /> {order.status}
-                    </p>
-                  )}
-                </div>
+                ))}
               </div>
-            ))
-          )}
-        </Container>
+            )}
+
+            {activeTab === "pickups" && (
+              <div>
+                <h3 className="mb-4 text-primary fw-bold">Your Active Pickups</h3>
+                {myPickups.length === 0 ? <p className="text-muted">No orders placed yet.</p> : 
+                  myPickups.map(order => (
+                    <div key={order._id} className="item-card" style={{borderLeftColor: '#0d6efd'}}>
+                      <Image src={order.imageUrl} className="item-img-large" />
+                      <div className="flex-grow-1">
+                        <div className="card-title-text">{order.name}</div>
+                        <div className="text-primary fw-bold mb-1">{order.status}</div>
+                        <div className="small text-muted">Pick up from: {order.sellerName}</div>
+                      </div>
+                      <Button variant="outline-primary" onClick={() => openUserProfile(order)}>Contact Seller</Button>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+          </main>
+        </div>
       </div>
-    </div>
+
+      {/* Seller Profile Modal */}
+      {/* Modal to view User Profile from Vendor Dashboard */}
+<Modal show={showUserModal} onHide={() => setShowUserModal(false)} centered size="lg">
+  <Modal.Header closeButton className="bg-success text-white">
+    <Modal.Title className="fw-bold">Homeowner Profile</Modal.Title>
+  </Modal.Header>
+  <Modal.Body className="p-4">
+    {selectedUser && (
+      <Row className="align-items-center">
+        <Col md={4} className="text-center border-end">
+          <Image 
+            src={profilePic} // Use the user's specific profile icon
+            roundedCircle 
+            width="120" 
+            height="120" 
+            className="border shadow-sm mb-3" 
+            style={{ objectFit: 'cover', border: '3px solid #1b5e20' }}
+          />
+          <h4 className="fw-bold text-dark">{selectedUser.sellerName}</h4>
+          <Badge bg="success" className="px-3 py-2">Verified Seller</Badge>
+        </Col>
+
+        <Col md={8} className="ps-4">
+          <h5 className="text-success border-bottom pb-2 mb-3 fw-bold">Contact Information</h5>
+          <p className="fs-5 mb-2"><strong>Phone:</strong> <a href={`tel:${selectedUser.sellerPhone}`} className="text-success text-decoration-none">{selectedUser.sellerPhone}</a></p>
+          <p className="fs-5 mb-2"><strong>Email:</strong> {selectedUser.sellerEmail}</p>
+          <p className="fs-5 mb-3"><strong>Pickup Address:</strong> {selectedUser.sellerAddress}</p>
+          
+          <h5 className="text-success border-bottom pb-2 mb-3 fw-bold">Selling Items</h5>
+          <div className="d-flex flex-wrap gap-2">
+            {/* Logic to show the specific tags the user registered with */}
+            {selectedUser.purposes?.map((item, i) => (
+              <Badge key={i} bg="light" text="dark" className="border px-3 py-2">{item}</Badge>
+            ))}
+          </div>
+        </Col>
+      </Row>
+    )}
+  </Modal.Body>
+</Modal>
+    </>
   );
 };
 
