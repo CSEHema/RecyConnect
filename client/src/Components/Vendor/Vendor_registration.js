@@ -373,7 +373,7 @@ function Vendor_registration() {
               >
                 SignUp
               </button>
-              <p className="text-success text-center mt-3">Already have an account? <a href="/user_login">Log In</a></p>
+              <p className="text-success text-center mt-3">Already have an account? <a href="/vendor_login">Log In</a></p>
             </form>
           </div>
         </div>
