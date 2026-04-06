@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import {
   Button,
@@ -7,9 +7,10 @@ import {
   Badge,
   Row,
   Col,
-  Form
+  Form,
+  Alert
 } from "react-bootstrap";
-import {Link} from "react-router-dom";
+import { Link } from "react-router-dom";
 
 // Assets
 import USER_BANNER from "../../static/images/user_dash_banner.png"; 
@@ -20,22 +21,26 @@ import jute from "../../static/images/jute.jpg";
 
 const API_BASE_URL = "http://localhost:5000/api";
 
-const User_dashboard = ({onLogout}) => {
+const User_dashboard = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState("listings");
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   
-  // Form States
+  // Form states
   const [newItemName, setNewItemName] = useState("");
   const [newItemWeight, setNewItemWeight] = useState("");
   const [newItemQty, setNewItemQty] = useState(1);
-  const [newItemImage, setNewItemImage] = useState(null);
+  const [newItemPrice, setNewItemPrice] = useState("");
+  const [newItemImageFile, setNewItemImageFile] = useState(null);  // File
+  const [imagePreview, setImagePreview] = useState(null);          // object URL
 
-  // Safety Lock State
+  // Safety / status
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingRequests, setProcessingRequests] = useState(new Set());
+  const [error, setError] = useState(null);
 
-  // Data States
+  // Data states
   const [listings, setListings] = useState([]);
   const [vendorRequests, setVendorRequests] = useState([]);
   const [history, setHistory] = useState([]); 
@@ -48,109 +53,209 @@ const User_dashboard = ({onLogout}) => {
           axios.get(`${API_BASE_URL}/user/listings`),
           axios.get(`${API_BASE_URL}/user/requests`)
         ]);
-        setListings(resListings.data);
+
+        // Normalize images coming from backend to always be array of URLs
+        const normalizedListings = resListings.data.map(item => ({
+          ...item,
+          images: item.images && item.images.length
+            ? item.images
+            : [jug]
+        }));
+
+        setListings(normalizedListings);
         setVendorRequests(resRequests.data);
+        setError(null);
       } catch (err) {
         console.warn("Backend offline. Loading local dummy data.");
         setListings([
-          { _id: "p1", name: "Plastic Bottles", weight: "5kg", qty: 2, initialQty: 5, images: [`${jug}`] },
-          { _id: "p2", name: "Old Jute Bags", weight: "2kg", qty: 0, initialQty: 10, images: [`${jute}`] },
+          { _id: "p1", name: "Plastic Bottles", weight: "5kg", qty: 2, initialQty: 5, images: [jug], price: 30 },
+          { _id: "p2", name: "Old Jute Bags", weight: "2kg", qty: 0, initialQty: 10, images: [jute], price: 50 },
         ]);
         setVendorRequests([
           { 
-            _id: "r1", itemId: "p1", itemName: "Plastic Bottles", vendorName: "Green Recycle Corp", 
-            vendorEmail: "contact@greenrecycle.com", vendorPhone: "+91 98765 43210",
-            vendorAddress: "123 Eco Park, Hyderabad", preferredItems: ["Plastic", "Glass"], distance: "2.5 km"
+            _id: "r1", itemId: "p1", itemName: "Plastic Bottles", qty: 1, price: 30, 
+            vendorName: "Green Recycle Corp", vendorEmail: "contact@greenrecycle.com", 
+            vendorPhone: "+91 98765 43210", vendorAddress: "123 Eco Park, Hyderabad", 
+            preferredItems: ["Plastic", "Glass"], distance: "2.5 km"
           },
         ]);
+        setError("Using demo data (backend offline)");
       }
     };
     fetchData();
   }, []);
 
+  // --- Image Preview Cleanup ---
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   // --- 2. CORE LOGIC: UPDATE LOCAL STATE ---
-  // This function handles the visual logic for stock and history
-  const performLocalUpdate = (requestId, itemId) => {
+  const performLocalUpdate = useCallback((requestId, itemId) => {
     const targetItem = listings.find(item => item._id === itemId);
     if (!targetItem) return;
 
-    // A. Update Stock (Safe functional update)
+    // A. Update Stock
     setListings(prev => prev.map(item => 
       item._id === itemId ? { ...item, qty: Math.max(0, item.qty - 1) } : item
     ));
 
-    // B. Move to History (Deduplicated)
+    // B. Move to History using request price/qty
     const acceptedReq = vendorRequests.find(req => req._id === requestId);
     if (acceptedReq) {
       setHistory(prev => {
         if (prev.find(h => h._id === requestId)) return prev;
         return [{
           ...acceptedReq,
+          _id: requestId,
           acceptedAt: new Date().toLocaleString(),
-          itemSoldName: targetItem.name, 
-          itemImage: targetItem.images[0]
+          itemSoldName: acceptedReq.itemName,
+          itemImage: targetItem.images?.[0] || jug,
+          itemPrice: acceptedReq.price,
+          itemQty: acceptedReq.qty,
         }, ...prev];
       });
     }
 
     // C. Remove from requests
     setVendorRequests(prev => prev.filter(req => req._id !== requestId));
-  };
+  }, [listings, vendorRequests]);
 
   // --- 3. BACKEND COORDINATION: ACCEPT ORDER ---
   const handleAcceptOrder = async (requestId, itemId) => {
-    if (isProcessing) return;
+    if (processingRequests.has(requestId) || isProcessing) return;
     
     const targetItem = listings.find(item => item._id === itemId);
     if (!targetItem || targetItem.qty <= 0) {
-      alert("Stock Out!");
+      setError("Stock unavailable!");
+      return;
+    }
+
+    setProcessingRequests(prev => new Set(prev).add(requestId));
+    setIsProcessing(true);
+
+    try {
+      await axios.patch(`${API_BASE_URL}/user/requests/${requestId}/accept`);
+      performLocalUpdate(requestId, itemId);
+      setError(null);
+    } catch (err) {
+      console.warn("Backend patch failed, updating UI locally only.");
+      performLocalUpdate(requestId, itemId);
+    } finally {
+      setProcessingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(requestId);
+        return newSet;
+      });
+      setIsProcessing(false);
+    }
+  };
+
+  // --- 4. FORM VALIDATION ---
+  const validateForm = () => {
+    if (!newItemName.trim()) return "Item name is required";
+    if (!newItemWeight.trim()) return "Weight is required";
+    if (!newItemPrice || parseFloat(newItemPrice) <= 0) return "Valid price is required";
+    if (newItemQty < 1) return "Quantity must be at least 1";
+    return null;
+  };
+
+  // --- 5. BACKEND COORDINATION: ADD ITEM ---
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    if (isProcessing) return;
+
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setIsProcessing(true);
-
-    try {
-      // Try backend first
-      await axios.patch(`${API_BASE_URL}/user/requests/${requestId}/accept`);
-      performLocalUpdate(requestId, itemId);
-    } catch (err) {
-      // SILENT FALLBACK: If backend fails, we still update the UI locally for testing
-      console.warn("Backend patch failed, updating UI locally only.");
-      performLocalUpdate(requestId, itemId);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // --- 4. BACKEND COORDINATION: ADD ITEM ---
-  const handleAddItem = async (e) => {
-    e.preventDefault();
-    if (isProcessing) return;
-    setIsProcessing(true);
+    setError(null);
 
     const itemToAdd = {
-      name: newItemName,
-      weight: newItemWeight,
+      name: newItemName.trim(),
+      weight: newItemWeight.trim(),
       qty: parseInt(newItemQty),
-      images: [newItemImage || jug]
+      price: parseFloat(newItemPrice),
     };
 
+    let finalImageUrl = jug; // default fallback
+
     try {
-      const res = await axios.post(`${API_BASE_URL}/user/listings`, itemToAdd);
-      setListings(prev => [res.data, ...prev]);
+      const formData = new FormData();
+      Object.entries(itemToAdd).forEach(([k, v]) => formData.append(k, v));
+
+      if (newItemImageFile) {
+        formData.append("image", newItemImageFile);
+      }
+
+      const res = await axios.post(`${API_BASE_URL}/user/listings`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      // Backend succeeded
+      const data = res.data;
+      finalImageUrl = data.imageUrl || data.image || data.images?.[0] || jug;
+
+      setListings(prev => [
+        { 
+          ...data, 
+          images: [finalImageUrl] 
+        },
+        ...prev
+      ]);
+
     } catch (err) {
       console.warn("Backend add failed, adding locally only.");
-      setListings(prev => [{ ...itemToAdd, _id: `local_${Date.now()}` }, ...prev]);
+
+      // Use the preview URL for local items
+      if (imagePreview) {
+        finalImageUrl = imagePreview;
+      }
+
+      setListings(prev => [
+        {
+          ...itemToAdd,
+          _id: `local_${Date.now()}`,
+          images: [finalImageUrl]
+        },
+        ...prev
+      ]);
     } finally {
       setIsProcessing(false);
       setShowAddModal(false);
-      setNewItemName(""); setNewItemWeight("");
+      resetForm();
     }
   };
 
+  // --- 6. Reset Form ---
+  const resetForm = useCallback(() => {
+    setNewItemName("");
+    setNewItemWeight("");
+    setNewItemQty(1);
+    setNewItemPrice("");
+    setNewItemImageFile(null);
+
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+      setImagePreview(null);
+    }
+  }, [imagePreview]);
+
+  // --- 7. Image Upload Handler ---
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
-    if (file) setNewItemImage(URL.createObjectURL(file));
+    if (file) {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      setNewItemImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
   };
 
   return (
@@ -169,17 +274,16 @@ const User_dashboard = ({onLogout}) => {
         .highlight-item { color: #1b5e20; font-weight: 800; font-size: 1.2rem; }
         .floating-add-btn { position: fixed; bottom: 40px; right: 40px; width: 75px; height: 75px; border-radius: 50%; background: #1b5e20; color: white; border: none; font-size: 35px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); z-index: 100; transition: 0.2s; }
         .floating-add-btn:hover { transform: scale(1.1); }
+        .floating-add-btn:disabled { opacity: 0.6; transform: none; }
       `}</style>
 
       <div className="dashboard-layout">
         <nav className="top-navbar">
-  {/* Standardized Logo Branding */}
-  <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }} className="fw-bold fs-3">
-    Recy<span style={{ color: "#81c784" }}>Connect</span>
-  </Link>
-  
-  <Button variant="outline-light" onClick={onLogout}>Logout</Button>
-</nav>
+          <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }} className="fw-bold fs-3">
+            Recy<span style={{ color: "#81c784" }}>Connect</span>
+          </Link>
+          <Button variant="outline-light" onClick={onLogout}>Logout</Button>
+        </nav>
 
         <div className="main-content-wrapper">
           <aside className="sidebar">
@@ -187,76 +291,145 @@ const User_dashboard = ({onLogout}) => {
               <Image src={USER_PROFILE_ICON} roundedCircle width="110" height="110" className="border shadow-sm mb-3" />
               <h4 className="text-success fw-bold">Bhavya Srinivas</h4>
             </div>
-            <div className={`nav-item ${activeTab === 'listings' ? 'active' : ''}`} onClick={() => setActiveTab('listings')}>My Waste Listings</div>
-            <div className={`nav-item ${activeTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveTab('requests')}>Vendor Requests ({vendorRequests.length})</div>
-            <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>Accepted Orders ({history.length})</div>
+            <div className={`nav-item ${activeTab === 'listings' ? 'active' : ''}`} onClick={() => setActiveTab('listings')}>
+              My Waste Listings
+            </div>
+            <div className={`nav-item ${activeTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveTab('requests')}>
+              Vendor Requests ({vendorRequests.length})
+            </div>
+            <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+              Accepted Orders ({history.length})
+            </div>
           </aside>
 
           <main className="main-content">
+            {error && (
+              <Alert variant="warning" className="mb-4">
+                {error}
+              </Alert>
+            )}
+            
             <div className="content-banner">
-                <h1 className="display-5 fw-bold">Your small actions, our planet’s big change.</h1>
-                <p className="lead fst-italic">Manage your impact. List. Recycle. Repeat.</p>
+              <h1 className="display-5 fw-bold">Your small actions, our planet's big change.</h1>
+              <p className="lead fst-italic">Manage your impact. List. Recycle. Repeat.</p>
             </div>
 
-            {activeTab === "listings" && <button className="floating-add-btn" onClick={() => setShowAddModal(true)} disabled={isProcessing}>+</button>}
+            {activeTab === "listings" && (
+              <button 
+                className="floating-add-btn" 
+                onClick={() => setShowAddModal(true)} 
+                disabled={isProcessing}
+                title={isProcessing ? "Processing..." : "Add New Listing"}
+              >
+                +
+              </button>
+            )}
 
             {activeTab === "listings" && (
               <div>
                 <h3 className="mb-4 text-success fw-bold">Inventory</h3>
-                {listings.map(item => (
-                  <div key={item._id} className="item-card">
-                    <Image src={item.images[0]} className="item-img" />
-                    <div className="flex-grow-1">
-                      <div className="fw-bold fs-3">{item.name} {item.qty === 0 && <Badge bg="danger" className="ms-2">Stock Out</Badge>}</div>
-                      <div className="text-muted">Weight: {item.weight} | <span className="fw-bold text-success">Qty: {item.qty}</span></div>
+                {listings.length === 0 ? (
+                  <Alert variant="info">No listings yet. Add your first item!</Alert>
+                ) : (
+                  listings.map(item => (
+                    <div key={item._id} className="item-card">
+                      <Image src={item.images?.[0] || jug} className="item-img" />
+                      <div className="flex-grow-1">
+                        <div className="fw-bold fs-3">
+                          {item.name} 
+                          {item.qty === 0 && <Badge bg="danger" className="ms-2">Stock Out</Badge>}
+                        </div>
+                        <div className="text-muted">
+                          Weight: {item.weight} | 
+                          <span className="fw-bold text-success"> Qty: {item.qty}</span> | 
+                          <span className="fw-italic text-success"> Price: ₹{item.price}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
 
             {activeTab === "requests" && (
               <div>
                 <h3 className="mb-4 text-primary fw-bold">Incoming Requests</h3>
-                {vendorRequests.map(req => {
-                  const currentStock = listings.find(i => i._id === req.itemId)?.qty || 0;
-                  return (
-                    <div key={req._id} className="item-card" style={{borderLeftColor: '#1565c0'}}>
-                      <div className="flex-grow-1">
-                        <div className="fw-bold fs-4 text-primary">{req.vendorName}</div>
-                        <div className="fs-5">Item: <span className="highlight-item">{req.itemName}</span></div>
+                {vendorRequests.length === 0 ? (
+                  <Alert variant="info">No vendor requests yet.</Alert>
+                ) : (
+                  vendorRequests.map(req => {
+                    const currentStock = listings.find(i => i._id === req.itemId)?.qty || 0;
+                    const isRequestProcessing = processingRequests.has(req._id);
+                    
+                    return (
+                      <div key={req._id} className="item-card" style={{borderLeftColor: '#1565c0'}}>
+                        <div className="flex-grow-1">
+                          <div className="fw-bold fs-4 text-primary">{req.vendorName}</div>
+                          <div className="fs-5">
+                            Item: <span className="highlight-item">{req.itemName}</span> | 
+                            Price: <span className="fw-bold text-success">₹{req.price || "0"}</span> |
+                            Qty: <span className="fw-bold text-success">{req.qty || "0"}</span>
+                          </div>
+                          {currentStock === 0 && <small className="text-danger">No stock available</small>}
+                        </div>
+                        <div className="d-flex gap-2">
+                          <Button 
+                            variant="success" 
+                            className="fw-bold px-4" 
+                            onClick={() => handleAcceptOrder(req._id, req.itemId)}
+                            disabled={isRequestProcessing || isProcessing || currentStock <= 0}
+                          >
+                            {isRequestProcessing ? "Processing..." : currentStock <= 0 ? "No Stock" : "Accept Order"}
+                          </Button>
+                          <Button 
+                            variant="outline-primary" 
+                            onClick={() => {setSelectedVendor(req); setShowVendorModal(true);}}
+                            disabled={isProcessing}
+                          >
+                            Profile
+                          </Button>
+                        </div>
                       </div>
-                      <div className="d-flex gap-2">
-                        <Button 
-                          variant="success" 
-                          className="fw-bold px-4" 
-                          onClick={() => handleAcceptOrder(req._id, req.itemId)}
-                          disabled={isProcessing || currentStock <= 0}
-                        >
-                          {isProcessing ? "Wait..." : currentStock <= 0 ? "No Stock" : "Accept Order"}
-                        </Button>
-                        <Button variant="outline-primary" onClick={() => {setSelectedVendor(req); setShowVendorModal(true);}}>Profile</Button>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             )}
 
             {activeTab === "history" && (
               <div>
                 <h3 className="mb-4 text-secondary fw-bold">Confirmed Deals</h3>
-                {history.map(entry => (
-                  <div key={entry._id} className="item-card" style={{borderLeftColor: '#6c757d'}}>
-                    <Image src={entry.itemImage} className="item-img" />
-                    <div className="flex-grow-1">
-                      <div className="fw-bold fs-4">{entry.vendorName}</div>
-                      <div className="fs-5">Item: <span className="highlight-item">{entry.itemSoldName}</span></div>
-                      <div className="small text-muted">{entry.acceptedAt}</div>
+                {history.length === 0 ? (
+                  <Alert variant="info">No completed deals yet.</Alert>
+                ) : (
+                  history.map(entry => (
+                    <div key={entry._id} className="item-card" style={{borderLeftColor: '#6c757d'}}>
+                      <Image src={entry.itemImage || jug} className="item-img" />
+                      <div className="flex-grow-1">
+                        <div className="fw-bold fs-4">{entry.vendorName}</div>
+                        <div className="fs-5">
+                          Item: <span className="highlight-item">
+                            {entry.itemSoldName || entry.itemName}
+                          </span> |
+                          Price: <span className="fw-bold text-success">
+                            ₹{entry.itemPrice ?? entry.price ?? 0}
+                          </span> |
+                          Qty: <span className="fw-bold text-success">
+                            {entry.itemQty ?? entry.qty ?? 0}
+                          </span>
+                        </div>
+                        <div className="small text-muted">{entry.acceptedAt}</div>
+                      </div>
+                      <Button 
+                        variant="info" 
+                        className="text-white fw-bold" 
+                        onClick={() => {setSelectedVendor(entry); setShowVendorModal(true);}}
+                      >
+                        Vendor Details
+                      </Button>
                     </div>
-                    <Button variant="info" className="text-white fw-bold" onClick={() => {setSelectedVendor(entry); setShowVendorModal(true);}}>Vendor Details</Button>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
           </main>
@@ -280,8 +453,13 @@ const User_dashboard = ({onLogout}) => {
                 <p className="fs-5"><strong>Phone:</strong> {selectedVendor.vendorPhone}</p>
                 <p className="fs-5"><strong>Email:</strong> {selectedVendor.vendorEmail}</p>
                 <p className="fs-5"><strong>Address:</strong> {selectedVendor.vendorAddress}</p>
+                {selectedVendor.distance && (
+                  <p className="fs-5"><strong>Distance:</strong> {selectedVendor.distance}</p>
+                )}
                 <div className="d-flex flex-wrap gap-2 mt-2">
-                  {selectedVendor.preferredItems?.map((tag, i) => <Badge key={i} bg="light" text="dark" className="border px-3 py-2">{tag}</Badge>)}
+                  {selectedVendor.preferredItems?.map((tag, i) => (
+                    <Badge key={i} bg="light" text="dark" className="border px-3 py-2">{tag}</Badge>
+                  ))}
                 </div>
               </Col>
             </Row>
@@ -290,16 +468,91 @@ const User_dashboard = ({onLogout}) => {
       </Modal>
 
       {/* Add Item Modal */}
-      <Modal show={showAddModal} onHide={() => setShowAddModal(false)} centered>
-        <Modal.Header closeButton className="bg-success text-white"><Modal.Title>Add Waste Listing</Modal.Title></Modal.Header>
+      <Modal show={showAddModal} onHide={() => { setShowAddModal(false); resetForm(); }} centered>
+        <Modal.Header closeButton className="bg-success text-white">
+          <Modal.Title>Add Waste Listing</Modal.Title>
+        </Modal.Header>
         <Modal.Body className="p-4">
           <Form onSubmit={handleAddItem}>
-            <Form.Group className="mb-3"><Form.Label className="fw-bold">Item Name</Form.Label><Form.Control type="text" onChange={(e) => setNewItemName(e.target.value)} required /></Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label className="fw-bold">Item Name <span className="text-danger">*</span></Form.Label>
+              <Form.Control 
+                type="text" 
+                placeholder="e.g. Plastic Bottles"
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                required 
+              />
+            </Form.Group>
+
             <Row>
-              <Col><Form.Group className="mb-3"><Form.Label className="fw-bold">Weight</Form.Label><Form.Control type="text" onChange={(e) => setNewItemWeight(e.target.value)} required /></Form.Group></Col>
-              <Col><Form.Group className="mb-3"><Form.Label className="fw-bold">Qty</Form.Label><Form.Control type="number" min="1" value={newItemQty} onChange={(e) => setNewItemQty(e.target.value)} /></Form.Group></Col>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-bold">Weight <span className="text-danger">*</span></Form.Label>
+                  <Form.Control 
+                    type="text" 
+                    placeholder="e.g. 5kg"
+                    value={newItemWeight}
+                    onChange={(e) => setNewItemWeight(e.target.value)}
+                    required 
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-bold">Price (₹) <span className="text-danger">*</span></Form.Label>
+                  <Form.Control 
+                    type="number" 
+                    min="0"
+                    step="0.01"
+                    placeholder="Amount"
+                    value={newItemPrice}
+                    onChange={(e) => setNewItemPrice(e.target.value)}
+                    required
+                  />
+                </Form.Group>
+              </Col>
             </Row>
-            <Button variant="success" type="submit" className="w-100 fw-bold py-2" disabled={isProcessing}>{isProcessing ? "Wait..." : "Post Listing"}</Button>
+
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-bold">Quantity</Form.Label>
+                  <Form.Control 
+                    type="number" 
+                    min="1"
+                    value={newItemQty}
+                    onChange={(e) => setNewItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-bold">Item Image</Form.Label>
+                  <Form.Control 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleImageUpload} 
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+
+            {imagePreview && (
+              <div className="text-center mb-3">
+                <Image src={imagePreview} thumbnail style={{ maxHeight: '150px', maxWidth: '200px' }} />
+                <div className="small text-muted mt-1">Preview</div>
+              </div>
+            )}
+
+            <Button 
+              variant="success" 
+              type="submit" 
+              className="w-100 fw-bold py-2" 
+              disabled={isProcessing}
+            >
+              {isProcessing ? "Processing..." : "Post Listing"}
+            </Button>
           </Form>
         </Modal.Body>
       </Modal>
