@@ -39,12 +39,12 @@ const Vendor_dashboard = ({ onLogout }) => {
         // Fallback Dummies with high-quality formatting
         setAvailableWaste([
           { 
-            _id: "w1", name: "Plastic Bottles", weight: "12kg", distance: "1.2 km", 
+            _id: "w1", name: "Plastic Bottles", weight: "12kg", distance: "1.2 km", price: "150",
             imageUrl: jug, sellerName: "John Doe", sellerAddress: "Banjara Hills, Hyd",
             sellerPhone: "+91 9876543210", sellerEmail: "john@email.com"
           },
           { 
-            _id: "w2", name: "Old Newspaper Bundle", weight: "25kg", distance: "3.5 km", 
+            _id: "w2", name: "Old Newspaper Bundle", weight: "25kg", distance: "3.5 km", price: "100",
             imageUrl: jug, sellerName: "Anjali Rao", sellerAddress: "Jubilee Hills, Hyd",
             sellerPhone: "+91 8888877777", sellerEmail: "anjali@email.com"
           },
@@ -95,6 +95,15 @@ const Vendor_dashboard = ({ onLogout }) => {
         .item-img-large { width: 120px; height: 120px; object-fit: cover; border-radius: 12px; margin-right: 25px; }
         .card-title-text { font-size: 1.4rem; font-weight: bold; color: #333; }
         .card-sub-text { font-size: 1.1rem; color: #666; }
+        .price-badge { 
+            font-size: 1.2rem; 
+            color: #1b5e20; 
+            font-weight: 800; 
+            background: #e8f5e9; 
+            padding: 5px 15px; 
+            border-radius: 8px; 
+            display: inline-block;
+        }
       `}</style>
 
       <div className="dashboard-layout">
@@ -134,10 +143,14 @@ const Vendor_dashboard = ({ onLogout }) => {
                 <h3 className="mb-4 text-success fw-bold">Waste Near You</h3>
                 {availableWaste.map(item => (
                   <div key={item._id} className="item-card">
-                    <Image src={item.imageUrl} className="item-img-large" />
+                    <Image src={item.imageUrl || item.images?.[0] || jug} className="item-img-large" />
                     <div className="flex-grow-1">
                       <div className="card-title-text">{item.name}</div>
                       <div className="card-sub-text mb-2">Weight: {item.weight} | <span className="text-primary fw-bold">📍 {item.distance}</span></div>
+                      {/* Price Display */}
+                      <div className="mb-2">
+                        <span className="price-badge">₹{item.price || "Negotiable"}</span>
+                      </div>
                       <Badge bg="light" text="dark" className="border">Seller: {item.sellerName}</Badge>
                     </div>
                     <div className="d-flex flex-column gap-2">
@@ -149,15 +162,20 @@ const Vendor_dashboard = ({ onLogout }) => {
               </div>
             )}
 
+            {/* --- PICKUPS TAB --- */}
+
             {activeTab === "pickups" && (
               <div>
                 <h3 className="mb-4 text-primary fw-bold">Your Active Pickups</h3>
                 {myPickups.length === 0 ? <p className="text-muted">No orders placed yet.</p> : 
                   myPickups.map(order => (
                     <div key={order._id} className="item-card" style={{borderLeftColor: '#0d6efd'}}>
-                      <Image src={order.imageUrl} className="item-img-large" />
+                      {/* Displaying User Provided Image */}
+                      <Image src={order.imageUrl || order.images?.[0] || jug} className="item-img-large" />
                       <div className="flex-grow-1">
                         <div className="card-title-text">{order.name}</div>
+                        {/* Price Display in Pickups */}
+                        <div className="fw-bold text-success mb-1">Price: ₹{order.price || "N/A"}</div>
                         <div className="text-primary fw-bold mb-1">{order.status}</div>
                         <div className="small text-muted">Pick up from: {order.sellerName}</div>
                       </div>
