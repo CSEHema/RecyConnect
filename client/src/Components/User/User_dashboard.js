@@ -23,7 +23,7 @@ import USER_PROFILE_ICON from "../../static/images/Untitled_1.png";
 import VENDOR_PROFILE_IMG from "../../static/images/Untitled_1.png";
 import jug from "../../static/images/plastic_jug.jpg";
 
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "https://recyconnect.onrender.com";
 
 const User_dashboard = ({ onLogout, user }) => {
   const navigate = useNavigate();
