@@ -9,7 +9,11 @@ const app = express();
 
 // --- 1. MIDDLEWARE & SETUP ---
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: ["https://recy-connect-umber.vercel.app", "http://localhost:3000"],
+  methods: ["GET", "POST", "PATCH", "DELETE"],
+  credentials: true
+}));
 
 const uploadDir = './uploads';
 if (!fs.existsSync(uploadDir)) {
