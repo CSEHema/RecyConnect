@@ -123,7 +123,7 @@ function Vendor_login() {
       setCaptcha(generateCaptcha());
       setError(false);
       setCaptchaError("");
-      navigate("/dashboard");
+      navigate("/vendor_dashboard");
 
     } catch (err) {
       setError({
