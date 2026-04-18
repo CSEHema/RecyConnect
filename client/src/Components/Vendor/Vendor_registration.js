@@ -126,7 +126,7 @@ function Vendor_registration() {
     setCaptcha(generateCaptcha());
     setError(false);
     setCaptchaError("");
-    navigate("/");
+    navigate("/vendor_dashboard");
   })
   .catch((error) => {
     console.error(error.response?.data?.error || "Registration failed");
