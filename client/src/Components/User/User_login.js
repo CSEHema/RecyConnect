@@ -77,7 +77,7 @@ function User_login({ onLoginSuccess }) {
     setCaptchaError("");
 
     try {
-      const res = await axios.post('https://recyconnect.onrender.com/auth/login', {
+      const res = await axios.post('https://recyconnect.onrender.com/api/auth/login', {
         email,
         password,
       });
