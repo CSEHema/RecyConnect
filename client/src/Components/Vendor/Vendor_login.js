@@ -105,7 +105,7 @@ function Vendor_login() {
     // 3. authentication only if all validations pass
     if (isValid) {
       try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', {
+      const res = await axios.post('http://localhost:5000/api/auth/vendor/login', {
         email,
         password,
       });
