@@ -68,7 +68,7 @@ function User_registration() {
     }
 
     if (isValid) {
-      axios.post('https://recyconnect.onrender.com/auth/register', {
+      axios.post('https://recyconnect.onrender.com/api/auth/register', {
         name, email, password, phno, address, purposes
       })
       .then(() => navigate("/user_login"))
