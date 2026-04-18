@@ -107,7 +107,7 @@ function Vendor_login({ onLoginSuccess }) {
     // 3. authentication only if all validations pass
     if (isValid) {
       try {
-        const res = await axios.post('http://localhost:5000/api/auth/vendor/login', {
+        const res = await axios.post('https://recyconnect.onrender.com/auth/vendor/login', {
           email,
           password,
         });
