@@ -13,7 +13,8 @@ function generateCaptcha(length = 5) {
 }
 
 
-function Vendor_login() {
+function Vendor_login({ onLoginSuccess }) {
+
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState(false);
   const [password, setPassword] = useState("");
@@ -103,34 +104,40 @@ function Vendor_login() {
     }
 
     // 3. authentication only if all validations pass
+    // 3. authentication only if all validations pass
     if (isValid) {
       try {
-      const res = await axios.post('http://localhost:5000/api/auth/vendor/login', {
-        email,
-        password,
-      });
+        const res = await axios.post('http://localhost:5000/api/auth/vendor/login', {
+          email,
+          password,
+        });
 
-      if (rememberMe) {
-        localStorage.setItem("rememberedEmail", email);
-      } else {
-        localStorage.removeItem("rememberedEmail");
+       onLoginSuccess(res.data.vendor); 
+
+        if (rememberMe) {
+          localStorage.setItem("rememberedEmail", email);
+        } else {
+          localStorage.removeItem("rememberedEmail");
+        }
+
+        // Reset local form state
+        setEmail("");
+        setPassword("");
+        setUserCaptcha("");
+        setCaptcha(generateCaptcha());
+        setError(false);
+        setCaptchaError("");
+
+        // Navigate now that the state is updated
+        navigate("/vendor_dashboard");
+
+      } catch (err) {
+        setError({
+          emailValid: true,
+          passwordErrors: [err.response?.data?.error || "Login failed"],
+        });
       }
-
-      // Reset everything
-      setEmail("");
-      setPassword("");
-      setUserCaptcha("");
-      setCaptcha(generateCaptcha());
-      setError(false);
-      setCaptchaError("");
-      navigate("/vendor_dashboard");
-
-    } catch (err) {
-      setError({
-        emailValid: true,
-        passwordErrors: [err.response?.data?.error || "Login failed"],
-      });
-    }}
+    }
   };
 
   return (
