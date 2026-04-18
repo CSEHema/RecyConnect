@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from 'axios';
 import image from '../../static/images/Untitled_1.png';
 
+// Helper to generate a fresh Captcha string
 function generateCaptcha(length = 5) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
   let captcha = "";
@@ -12,8 +13,7 @@ function generateCaptcha(length = 5) {
   return captcha;
 }
 
-
-function User_login() {
+function User_login({ onLoginSuccess }) {
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState(false);
   const [password, setPassword] = useState("");
@@ -23,14 +23,10 @@ function User_login() {
   const [captchaError, setCaptchaError] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [msg, setMsg] = useState('');
 
+  // 1. Initial Load: Set Captcha and check "Remember Me"
   useEffect(() => {
     setCaptcha(generateCaptcha());
-  }, []);
-
-  useEffect(() => {
     const savedEmail = localStorage.getItem("rememberedEmail");
     if (savedEmail) {
       setEmail(savedEmail);
@@ -43,102 +39,84 @@ function User_login() {
     setUserCaptcha("");
   };
 
-  const validate_email = (email) => {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return regex.test(email);
-  };
+  // 2. Validation Helpers
+  const validate_email = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
   const validate_password = (psw) => {
-    var errors = [];
-    var regex1 = /^.{8,16}$/;
-    var regex2 = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9.,])(?!.*[.,]).+$/;
-    if (!regex1.test(psw)) {
+    let errors = [];
+    if (!/^.{8,16}$/.test(psw)) {
       errors.push("The password should contain from 8 to 16 characters.");
     }
-    if (!regex2.test(psw)) {
-      errors.push(
-        "The password must contain atleast one uppercase letter, one lowercase letter and one special character."
-      );
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9.,])(?!.*[.,]).+$/.test(psw)) {
+      errors.push("Password must contain at least one uppercase, one lowercase, and one special character.");
     }
     return errors;
   };
 
-  const validate = (email, password) => {
-    let result = {
-      emailValid: true,
-      passwordErrors: [],
-    };
-
-    if (!validate_email(email)) {
-      result.emailValid = false;
-    }
-
-    const passwordValidation = validate_password(password);
-    if (passwordValidation.length > 0) {
-      result.passwordErrors = passwordValidation;
-    }
-
-    return result;
-  };
-
-  const handleSubmit = async(e) => {
+  // 3. Form Submission
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Front-end Validations
+    const passwordValidation = validate_password(password);
+    const isEmailValid = validate_email(email);
+    const isCaptchaValid = userCaptcha.trim() === captcha.trim();
 
-    const result = validate(email, password);
-    let isValid = true;
-
-    // 1. Email & password validation
-    if (!result.emailValid || result.passwordErrors.length > 0) {
-      setError(result);
-      isValid = false;
-    } else {
-      setError(false);
+    if (!isEmailValid || passwordValidation.length > 0) {
+      setError({ emailValid: isEmailValid, passwordErrors: passwordValidation });
+      return;
     }
 
-    // 2. CAPTCHA validation
-    if (userCaptcha.trim() !== captcha.trim()) {
+    if (!isCaptchaValid) {
       setCaptchaError("CAPTCHA does not match.");
-      isValid = false;
-    } else {
-      setCaptchaError("");
+      return;
     }
 
-    // 3. authentication only if all validations pass
-    if (isValid) {
-      try {
+    // Clear UI Errors before API call
+    setError(false);
+    setCaptchaError("");
+
+    try {
       const res = await axios.post('http://localhost:5000/api/auth/login', {
         email,
         password,
       });
 
+      // Handle "Remember Me" logic
       if (rememberMe) {
         localStorage.setItem("rememberedEmail", email);
       } else {
         localStorage.removeItem("rememberedEmail");
       }
 
-      // Reset everything
-      setEmail("");
-      setPassword("");
-      setUserCaptcha("");
-      setCaptcha(generateCaptcha());
-      setError(false);
-      setCaptchaError("");
+      // CRITICAL: Send the actual database user data to App.js
+      // This ensures the Dashboard sees real data, not static placeholders.
+      if (onLoginSuccess) {
+        onLoginSuccess(res.data.user); 
+      }
+
+      // Store token separately if your backend sends one
+      if (res.data.token) {
+        localStorage.setItem("token", res.data.token);
+      }
+
+      // Final redirect
       navigate("/user_dashboard");
 
     } catch (err) {
       setError({
         emailValid: true,
-        passwordErrors: [err.response?.data?.error || "Login failed"],
+        passwordErrors: [err.response?.data?.error || "Login failed. Please check your credentials."],
       });
-    }}
+      refreshCaptcha(); // Force fresh captcha on failure
+    }
   };
 
   return (
     <div className="container-fluid px-0">
-  <div className="row g-0 min-vh-100">
-
-    {/* LEFT SIDE: Image section (only on md and up) */}
-    <div
+      <div className="row g-0 min-vh-100">
+        {/* LEFT SIDE: Visuals */}
+        <div
           className="col-md-6 d-none d-md-block"
           style={{
             backgroundImage: `url(${image})`,
@@ -148,145 +126,100 @@ function User_login() {
           }}
         ></div>
 
-    {/* RIGHT SIDE: Login */}
-    <div className="col-12 col-md-6 d-flex flex-column bg-light" >
-
-      {/* LOGIN FORM */}
-      <div className="d-flex flex-grow-1 align-items-center justify-content-center px-3 py-5">
-        <div className="col-12 col-sm-10 col-md-10 col-lg-9 col-xl-8">
-          <div className="p-4 bg-white bg-opacity-75 rounded-4 green-shadow">
-            <h3 className="text-center fw-bold mb-4 text-success">Login as User</h3>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-3">
-                <label htmlFor="exampleInputEmail1" className="form-label">
-                  Email address
-                </label>
-                <input
-                  type="email"
-                  className="form-control"
-                  id="exampleInputEmail1"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-
-                {error && error.emailValid === false && (
-                  <p style={{ color: "red" }}>Invalid email address.</p>
-                )}
-              </div>
-
-              <div className="mb-3">
-                <label htmlFor="exampleInputPassword1" className="form-label">
-                  Password
-                </label>
-                <div className="input-group">
-                  <input
-                    type={visible ? "text" : "password"}
-                    className="form-control"
-                    id="exampleInputPassword1"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary text-success btn-eye-toggle"
-                    onClick={() => setVisible((prev) => !prev)}
-                    tabIndex={-1}
-                  >
-                    {visible ? (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        fill="currentColor"
-                        class="bi bi-eye-slash-fill"
-                        viewBox="0 0 16 16"
-                        
-                      >
-                        <path d="m10.79 12.912-1.614-1.615a3.5 3.5 0 0 1-4.474-4.474l-2.06-2.06C.938 6.278 0 8 0 8s3 5.5 8 5.5a7 7 0 0 0 2.79-.588M5.21 3.088A7 7 0 0 1 8 2.5c5 0 8 5.5 8 5.5s-.939 1.721-2.641 3.238l-2.062-2.062a3.5 3.5 0 0 0-4.474-4.474z" />
-                        <path d="M5.525 7.646a2.5 2.5 0 0 0 2.829 2.829zm4.95.708-2.829-2.83a2.5 2.5 0 0 1 2.829 2.829zm3.171 6-12-12 .708-.708 12 12z" />
-                      </svg>
-                    ) : (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        fill="currentColor"
-                        class="bi bi-eye-fill"
-                        viewBox="0 0 16 16"
-                    
-                      >
-                        <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0" />
-                        <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8m8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7" />
-                      </svg>
+        {/* RIGHT SIDE: Interactive Login */}
+        <div className="col-12 col-md-6 d-flex flex-column bg-light">
+          <div className="d-flex flex-grow-1 align-items-center justify-content-center px-3 py-5">
+            <div className="col-12 col-sm-10 col-md-10 col-lg-9 col-xl-8">
+              <div className="p-4 bg-white bg-opacity-75 rounded-4 shadow">
+                <h3 className="text-center fw-bold mb-4 text-success">User Login</h3>
+                <form onSubmit={handleSubmit}>
+                  
+                  {/* Email Input */}
+                  <div className="mb-3">
+                    <label className="form-label">Email address</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                    {error && error.emailValid === false && (
+                      <p className="text-danger small mt-1">Please enter a valid email.</p>
                     )}
-                  </button>
-                </div>
-                {error &&
-                  error.passwordErrors &&
-                  error.passwordErrors.map((err, index) => (
-                    <p key={index} style={{ color: "red" }}>
-                      {err}
-                    </p>
-                  ))}
-              </div>
-
-              <div className="mb-3">
-                <label className="form-label">CAPTCHA</label>
-
-                <div className="d-flex align-items-center mb-2">
-                  <div className="bg-light border rounded px-3 py-2 me-2 fw-bold fs-4 font-monospace">
-                    {captcha}
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={refreshCaptcha}
-                  >
-                    ↻ Refresh
-                  </button>
-                </div>
 
-                <input
-                  type="text"
-                  className="form-control"
-                  value={userCaptcha}
-                  onChange={(e) => setUserCaptcha(e.target.value)}
-                />
+                  {/* Password Input */}
+                  <div className="mb-3">
+                    <label className="form-label">Password</label>
+                    <div className="input-group">
+                      <input
+                        type={visible ? "text" : "password"}
+                        className="form-control"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary"
+                        onClick={() => setVisible(!visible)}
+                      >
+                        {visible ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                    {error && error.passwordErrors?.map((err, i) => (
+                      <p key={i} className="text-danger small mt-1 mb-0">{err}</p>
+                    ))}
+                  </div>
 
-                {captchaError && (
-                  <div className="form-text text-danger">{captchaError}</div>
-                )}
+                  {/* Captcha Section */}
+                  <div className="mb-3">
+                    <label className="form-label">Verification</label>
+                    <div className="d-flex align-items-center mb-2">
+                      <div className="bg-light border rounded px-3 py-2 me-2 fw-bold fs-4 font-monospace">
+                        {captcha}
+                      </div>
+                      <button type="button" className="btn btn-sm btn-outline-success" onClick={refreshCaptcha}>
+                        ↻ Refresh
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Enter the code shown above"
+                      value={userCaptcha}
+                      onChange={(e) => setUserCaptcha(e.target.value)}
+                      required
+                    />
+                    {captchaError && <div className="text-danger small mt-1">{captchaError}</div>}
+                  </div>
+
+                  {/* Options */}
+                  <div className="form-check mb-3">
+                    <input
+                      type="checkbox"
+                      className="form-check-input"
+                      id="rememberMe"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="rememberMe">Remember Me</label>
+                  </div>
+
+                  <button type="submit" className="btn btn-success w-100 py-2">Sign In</button>
+                  
+                  <p className="text-center mt-3">
+                    New here? <a href="/user_registration" className="text-success fw-bold">Create an account</a>
+                  </p>
+                </form>
               </div>
-
-              <div className="form-check mb-3">
-                <input
-                  type="checkbox"
-                  className="form-check-input border border-success"
-                  id="rememberMe"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                <label className="form-check-label" htmlFor="rememberMe">
-                  Remember Me
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn-success text-light w-100"
-              >
-                Login
-              </button>
-              <p className="text-success text-center mt-3">Don't have an account? <a href="/user_registration">Sign Up</a></p>
-            </form>
+            </div>
           </div>
         </div>
       </div>
     </div>
-    </div>
-    </div>
-   
-  )
+  );
 }
 
-export default User_login
+export default User_login;
