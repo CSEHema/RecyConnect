@@ -108,7 +108,7 @@ function Vendor_registration() {
           if (isValid) {
             //Database logic - insert name, ph no., email and password into users table sql
               
-               axios.post('http://localhost:5000/api/auth/register', {
+               axios.post('http://localhost:5000/api/auth/vendor/register', {
     name,
     email,
     password,
