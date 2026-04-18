@@ -22,7 +22,7 @@ import banner from "../../static/images/user_dash_banner.png";
 import profilePic from "../../static/images/Untitled_1.png"; 
 import jug from "../../static/images/plastic_jug.jpg";
 
-const API_BASE_URL = "https://recyconnect.onrender.com";
+const API_BASE_URL = "https://recyconnect.onrender.com/api";
 
 const Vendor_dashboard = ({ onLogout, user }) => {
   // ---------------------------------------------------------
