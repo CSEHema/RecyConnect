@@ -108,7 +108,7 @@ function Vendor_registration() {
           if (isValid) {
             //Database logic - insert name, ph no., email and password into users table sql
               
-               axios.post('https://recyconnect.onrender.com/auth/vendor/register', {
+               axios.post('https://recyconnect.onrender.com/api/auth/vendor/register', {
     name,
     email,
     password,
