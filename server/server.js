@@ -131,7 +131,7 @@ app.post('/api/user/listings', upload.single('image'), async (req, res) => {
       ...req.body,
       address: userProfile.address, 
       phone: userProfile.phno, 
-      imageUrl: req.file ? `http://localhost:5000/uploads/${req.file.filename}` : null
+      imageUrl: req.file ? `https://recyconnect.onrender.com/uploads/${req.file.filename}` : null
     });
     await newListing.save();
     res.status(201).json(newListing);
