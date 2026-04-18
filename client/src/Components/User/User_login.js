@@ -123,7 +123,7 @@ function User_login() {
       setCaptcha(generateCaptcha());
       setError(false);
       setCaptchaError("");
-      navigate("/dashboard");
+      navigate("/user_dashboard");
 
     } catch (err) {
       setError({
